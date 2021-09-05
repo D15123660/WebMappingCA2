@@ -1,0 +1,8 @@
+{
+  "name": "Web",
+  "description": "Web.",
+  "icons": [{
+    "src": "images/download.png",
+    "sizes": "192x192"
+  }]
+}

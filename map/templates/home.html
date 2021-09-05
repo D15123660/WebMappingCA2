@@ -1,0 +1,425 @@
+{% extends "map/base.html" %}
+{% block content %}
+    {% load leaflet_tags %}
+    {% load static %}
+    {% load i18n %}
+    {% load crispy_forms_tags %}
+    {% load crispy_forms_filters %}
+    <head>
+        {% leaflet_js %}
+        {% leaflet_css %}
+        {% block head_title %}{% endblock %}
+        {% block extra_header %}
+
+        {% endblock %}
+
+    </head>
+    <body>
+    {% block body_content %}
+        <style>
+            #map {
+                width: 70vw;
+                height: 60vh;
+            }
+        </style>
+        {% leaflet_map "map" callback="window.map_init_basic" %}
+
+        <div class="container-fluid">
+            <div class="row">
+
+                <div id="divDistance">
+                    <p>
+                        Distance:<br/>
+                        <span id="distance">0</span> km
+                    </p>
+                </div>
+                <div id="divSpeedL">
+                    <div class="SpeedLimitContainer">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Ireland_road_sign_RUS_021.svg/480px-Ireland_road_sign_RUS_021.svg.png"
+                             alt="Speed Limit" style="width:70%;">
+                        <div class="centered" style="margin-top: 1vh"><span id="speedlimit">0</span>
+                            <p id="kmh">km/h</p></div>
+
+                    </div>
+                </div>
+                <div id="divSpeed">
+                    <p>
+                        Speed:<br/>
+                        <span id="speed">0</span> Km/h
+                    </p>
+                </div>
+
+            </div>
+
+        </div>
+    {% endblock %}
+    </body>
+    {% block extra_footer %}
+
+        <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-autohide="false">
+            <div class="toast-header">
+                <strong class="mr-auto">Advanced Web Mapping</strong>
+                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+        <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+        <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
+
+        <script>
+            $("#body_div").css({"top": $(".site-header").height() + 10, "position": "absolute"});
+            $(".toast").css({
+                "top": ($(document).height() / 5),
+                "left": ($(document).width() / 5),
+                "position": "fixed",
+                "z-index": 2000
+            });
+
+        </script>
+        <script>
+            let HOST = location.protocol + "//" + location.host;
+            let locationMarker;
+            let circle;
+            let globalMap;
+            let followMe;
+            let speed;
+            let globalLat;
+            let globalLng;
+            let overpassCallTime;
+            let speedLimit;
+
+            $("#map").css({
+                "width": "100%",
+                "height": $(document).height() - ($(".site-header").height() + $("#footer").height() + 45)
+            });
+
+            // Map initialises on startup
+            function map_init_basic(map, options) {
+                let pos;
+                followMe = 1;
+                map.setView([53.5, -8.5], 11);
+                updateLocation(map);
+                map.on('touchstart click dblclick ', function () {
+                    //updateLocation(map);
+                    followMe = 0;
+
+                });
+                globalMap = map;
+            }
+
+            function updateLocation(map) {
+                navigator.geolocation.getCurrentPosition(function (pos) {
+                        setMapToCurrentLocation(map, pos);
+                        update_db(pos);
+
+                    },
+                    function (err) {
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 30000
+                    }
+                );
+            }
+
+            // Function to set the map to the current location
+            function setMapToCurrentLocation(map, pos) {
+                console.log("In setMapToCurrentLocation.");
+                let myLatLon = L.latLng(pos.coords.latitude, pos.coords.longitude);
+
+                map.flyTo(myLatLon, 16);
+                globalLat = myLatLon.lat;
+                globalLng = myLatLon.lng;
+
+                if (locationMarker) {
+                    map.removeLayer(locationMarker);
+                }
+
+                // Adding a marker and a red circle to the starting position
+                locationMarker = new L.Marker(myLatLon).addTo(map);
+                if (circle) {
+                    map.removeLayer(circle);
+                }
+                circle = L.circle(myLatLon, {color: 'red', fillColor: 'red', fillOpacity: 0.1, radius: 20}).addTo(map);
+
+
+                $(".toast-body").html("Found location<br>Lat: " + myLatLon.lat + " Lon: " + myLatLon.lng);
+                $(".toast").toast('show');
+            }
+
+            // Function that will draw the users trail as a line string
+            function startJourneyTrail(map, lastPos, newPos) {
+                let myLatLon = L.latLng(newPos.coords.latitude, newPos.coords.longitude);
+
+                globalLat = myLatLon.lat;
+                globalLng = myLatLon.lng;
+
+                if (followMe == 1) {
+                    map.flyTo(myLatLon, 16);
+                }
+                {#circle = L.circle(myLatLon, {color: 'red', fillColor: 'red', fillOpacity: 0.1, radius: 10}).addTo(map);#}
+
+                // If they are over the speed limit then draw the line in red
+                if (speed > speedLimit) {
+                    L.polygon([
+                            [lastPos.coords.latitude, lastPos.coords.longitude],
+                            [newPos.coords.latitude, newPos.coords.longitude]], {
+                            color: '#ae0823'
+                        }
+                    ).addTo(map);
+                    // if they are under the speed limit then draw the line in blue
+                } else {
+                    L.polygon([
+                            [lastPos.coords.latitude, lastPos.coords.longitude],
+                            [newPos.coords.latitude, newPos.coords.longitude]], {
+                            color: '#007cb1'
+                        }
+                    ).addTo(map);
+                }
+
+            }
+
+            function update_db(pos) {
+                let locString = pos.coords.longitude + ", " + pos.coords.latitude;
+
+                $.ajax({
+                    type: "POST",
+                    url: "{% url 'updatedb' %}",
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    data: {
+                        point: locString
+                    }
+                }).done(function (data, status, xhr) {
+                    console.log(data["message"])
+                    var originalMsg = $(".toast-body").html();
+                    $(".toast-body").html(originalMsg + "<br/>Updated database<br/>" + data["message"]);
+
+                }).fail(function (xhr, status, error) {
+                    console.log('hi' + error);
+                    var originalMsg = $(".toast-body").html();
+                    $(".toast-body").html(originalMsg + "<br/>" + error);
+                }).always(function () {
+                    console.log("find_loc_ed finished");
+                    $(".toast").toast('show');
+                });
+            }
+
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = jQuery.trim(cookies[i]);
+                        // Does this cookie string begin with the name we want?
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+
+
+            //-----------------------------------------------------------------------
+
+            let start = 0;
+            var watchID;
+            var startPos;
+            var lastPos;
+
+
+            // Checking if Geolocation is supported
+            if (navigator.geolocation) {
+                console.log('Geolocation is supported!');
+            } else {
+                console.log('Geolocation is not supported for this Browser/OS version yet.');
+            }
+
+            // calculateDistance() performs a geometric algorithm to determine the distance between two points
+            function calculateDistance(lat1, lon1, lat2, lon2) {
+                var R = 6371; // km
+                var dLat = (lat2 - lat1).toRad();
+                var dLon = (lon2 - lon1).toRad();
+                var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(lat1.toRad()) * Math.cos(lat2.toRad()) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                var d = R * c;
+                return d;
+            }
+
+            function convertTimeStamp(unix_timestamp) {
+                // Create a new JavaScript Date object based on the timestamp
+                var date = new Date(unix_timestamp);
+                return date;
+            }
+
+            function calculateSpeed(startPos, position) {
+
+                var distance = calculateDistance(startPos.coords.latitude, startPos.coords.longitude, position.coords.latitude, position.coords.longitude);
+                // milliseconds to seconds
+                var seconds = Math.abs(convertTimeStamp(position.timestamp) - convertTimeStamp(startPos.timestamp)) / 1000;
+                var minutes = seconds / 60;
+                var hours = minutes / 60;
+                speed = distance / hours;
+                return Math.round(speed);
+            }
+
+            Number.prototype.toRad = function () {
+                return this * Math.PI / 180;
+            }
+
+            window.onload = function () {
+                var geoOptions = {
+                    enableHighAccuracy: true,
+                    timeout: 3000
+                }
+
+                var geoSuccess = function (position) {
+                    startPos = position;
+                };
+
+                var geoError = function (error) {
+                    console.log('Error occurred. Error code: ' + error.code);
+                    // error.code can be:
+                    //   0: unknown error
+                    //   1: permission denied
+                    //   2: position unavailable (error response from location provider)
+                    //   3: timed out
+                };
+
+
+                navigator.geolocation.getCurrentPosition(geoSuccess, geoError, geoOptions);
+
+                //if (start == 1) {
+                // Start watchlocation
+                // This will return geolocation information every time the device changes the position
+                watchID = navigator.geolocation.watchPosition(function (position) {
+
+                    if (lastPos == undefined) {
+                        lastPos = position;
+                    }
+                    console.log(position);
+                    // Update every second
+                    var oldSec = Math.abs(convertTimeStamp(lastPos.timestamp)) / 1000;
+                    var newSec = Math.abs(convertTimeStamp(position.timestamp)) / 1000;
+
+                    if (newSec > (oldSec + 1)) {
+
+                        // Total distance
+                        var distance = Number(calculateDistance(startPos.coords.latitude, startPos.coords.longitude, position.coords.latitude, position.coords.longitude)).toFixed(2);
+                        // Distance between current and last positions
+                        var distanceThresh = Number(calculateDistance(lastPos.coords.latitude, lastPos.coords.longitude, position.coords.latitude, position.coords.longitude)).toFixed(2)
+                        // GPS Readings will only be taken in if the accuracy is less than 10m or the user has traveled 200m without any GPS reading
+                        if ((position.coords.accuracy < 10) || (distanceThresh > 0.2) || ((newSec - oldSec) == 10)) {
+
+                            var speed = calculateSpeed(lastPos, position);
+
+                            if (speedLimit == undefined) {
+                                speedLimit = 0;
+                            }
+
+                            // If the user is over the speed limit
+                            if ((speed > speedLimit) && (speedLimit > 0)) {
+                                document.getElementById('speed').innerHTML = speed;
+                                document.getElementById('speed').style.color = "red";
+                                {##}
+                                {#var msg = new SpeechSynthesisUtterance();#}
+                                {#var voices = window.speechSynthesis.getVoices();#}
+                                {#msg.volume = 1; // From 0 to 1#}
+                                {#msg.rate = 1; // From 0.1 to 10#}
+                                {#msg.pitch = 1; // From 0 to 2#}
+                                {#msg.text = "You are going " + speed.toString() + " kilometers an hour." + " The speed limit is" + speedLimit.toString() + " kilometers an hour. slow down";#}
+                                {#msg.lang = 'en-US';#}
+                                {#speechSynthesis.speak(msg);#}
+
+                                // If the user is under the speed limit
+                            } else {
+                                document.getElementById('speed').innerHTML = speed;
+                                document.getElementById('speed').style.color = "green";
+
+                            }
+
+                            document.getElementById('distance').innerHTML = distance;
+                            // Send the last position and the current position to the Journey Trail function to be drawn onto the map
+                            startJourneyTrail(globalMap, lastPos, position);
+                            lastPos = position;
+
+                        }
+                        console.log(position);
+                    }
+
+                    // Make the call to Overpass every 5 seconds to prevent too many API calls from happening
+                    // This will be used to return the roads speed limit
+                    if (overpassCallTime == undefined) {
+                        overpassCallTime = newSec - 5;
+                    }
+                    if (newSec > (overpassCallTime + 5)) {
+                        console.log(overpassCallTime);
+
+                        // This will return all geospatial data with the keyword maxspeed in it
+                        var overpassApiUrl = buildOverpassApiUrl(map, 'maxspeed')
+                        $.get(overpassApiUrl, function (osmDataAsJson) {
+                            var resultAsGeojson = osmtogeojson(osmDataAsJson);
+                            var resultLayer = L.geoJson(resultAsGeojson, {
+                                style: function (feature) {
+                                    return {color: "#ff00ff"};
+                                },
+                                filter: function (feature, layer) {
+                                    var isPolygon = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Polygon");
+                                    if (isPolygon) {
+                                        feature.geometry.type = "Point";
+                                        var polygonCenter = L.latLngBounds(feature.geometry.coordinates[0]).getCenter();
+                                        feature.geometry.coordinates = [polygonCenter.lat, polygonCenter.lng];
+                                    }
+                                    return true;
+                                },
+                                onEachFeature: function (feature, layer) {
+                                    var popupContent = "";
+                                    popupContent = popupContent + "<dt>@id</dt><dd>" + feature.properties.type + "/" + feature.properties.id + "</dd>";
+                                    var keys = Object.keys(feature.properties.tags);
+                                    keys.forEach(function (key) {
+
+                                        popupContent = popupContent + "<dt>" + key + "</dt><dd>" + feature.properties.tags[key] + "</dd>";
+                                        if (key == 'maxspeed') {
+                                            document.getElementById('speedlimit').innerHTML = feature.properties.tags[key];
+                                            speedLimit = feature.properties.tags[key];
+                                        }
+
+                                    });
+                                    popupContent = popupContent + "</dl>"
+                                    layer.bindPopup(popupContent);
+                                }
+
+                            })
+                        });
+
+                        overpassCallTime = newSec;
+                    }
+
+                });
+            };
+
+            function buildOverpassApiUrl(map, overpassQuery) {
+                // Using the around keyword in Overpass in order to get the road that the user is currently on
+                // In this case, we are checking for roads that are within 10 meters of the user
+                var around = 'around:10,' + globalLat + ',' + globalLng
+                var nodeQuery = 'node[' + overpassQuery + '](' + around + ');';
+                var wayQuery = 'way[' + overpassQuery + '](' + around + ');';
+                var query = '?data=[out:json][timeout:15];(' + nodeQuery + wayQuery + ');out body geom;';
+                var baseUrl = 'https://overpass-api.de/api/interpreter';
+                var resultUrl = baseUrl + query;
+                return resultUrl;
+            }
+
+        </script>
+
+    {% endblock %}
+{% endblock content %}
+
+

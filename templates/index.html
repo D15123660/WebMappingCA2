@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% load pwa %}
+{% progressive_web_app_meta %}
+{% block title %}Index{% endblock %}
+<link rel="manifest" href="manifest.json">
+{% block content %}
+    {% if request.session.is_login %}
+    <h1>Hello,{{ request.session.user_name }}！Welcome back！</h1>
+    {% else %}
+    <h1>You are not logged in, you can only access public content！</h1>
+    {% endif %}
+{% endblock %}

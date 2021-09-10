@@ -27,7 +27,7 @@ urlpatterns = {
     url(r'^register/', views.register),
     url(r'^logout/', views.logout),
     url(r'^map/', views.map),
-    path('^se/', include('servicework.urls')),
+    path('^se/', include('pwa.urls')),
     path('^up/', include('login.urls')),
     path('^mp/', include('map.urls'))
 

@@ -16,6 +16,7 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 from jedi.plugins import django
 
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 PWA_SERVICE_WORKER_PATH = os.path.join(BASE_DIR,'static/js','serviceworker.js')
 # Quick-start development settings - unsuitable for production
@@ -25,9 +26,12 @@ PWA_SERVICE_WORKER_PATH = os.path.join(BASE_DIR,'static/js','serviceworker.js')
 SECRET_KEY = '%)7qa0=0^5tvib)lz@q(*%c#tlq1ed$o1666g^iv70z@9)z(e_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
+
+# Static file collection directory
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 # Application definition
 
@@ -40,13 +44,13 @@ INSTALLED_APPS = {
     'django.contrib.staticfiles',
     'django.contrib.gis',
     'login.apps.LoginConfig',
-    'pwa',
     'crispy.forms',
+    'leaflet',
     'rest_framework',
     'rest_framework_gis',
-    'rest_framework.authtoken',
     'map',
-    'servicework',
+    'rest_framework.autogen',
+    'pwa',
 }
 
 MIDDLEWARE = [

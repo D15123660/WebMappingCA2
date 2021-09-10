@@ -2,21 +2,25 @@
 from django import forms
 from django.core.handlers import exception
 from django.shortcuts import render, redirect
+from rest_framework import viewsets
 
 from login import models
 from login.forms import UserForm, RegisterForm
 from login.models import User
+from map.serializers import UserSerializer
 
 
 def index(request):
     pass
-    return render(request, 'index.html')
+    return render(request, 'templates/index.html')
 
-def get (self, request, *args, **kwargs):
+
+def get(self, request, *args, **kwargs):
     if isinstance(request.user, User):
         return self.list(request, *args, **kwargs)
     else:
         raise exception.NotAcceptable
+
 
 def login(request):
     if request.session.get('is_login', None):
@@ -93,3 +97,8 @@ def logout(request):
 
     if not request.session.get("is_login", None):
         return redirect('/login/')
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all().order_by('-date_joined')
+    serializer_class = UserSerializer

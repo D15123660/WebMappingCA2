@@ -1,5 +1,5 @@
 from . import models
-from rest_framework import serializers
+import rest_framework
 from rest_framework_gis import serializers as geo_serializers
 from rest_framework.reverse import reverse
 from django.contrib.auth import get_user_model
@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 
 
 class UserMeSerializer(geo_serializers.GeoFeatureModelSerializer):
-    url = serializers.SerializerMethodField()
+    url = rest_framework.serializers.SerializerMethodField()
 
     class Meta:
         model = get_user_model()
@@ -21,7 +21,7 @@ class UserMeSerializer(geo_serializers.GeoFeatureModelSerializer):
 
 
 class UserOtherSerializer(geo_serializers.GeoFeatureModelSerializer):
-    url = serializers.SerializerMethodField()
+    url = rest_framework.serializers.SerializerMethodField()
 
     class Meta:
         model = get_user_model()

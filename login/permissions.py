@@ -1,7 +1,7 @@
-from rest_framework import permissions
+import rest_framework
 from login.models import User
 
-class IsOwner(permissions.BasePermission):
+class IsOwner(rest_framework.permissions.BasePermission):
     def has_permission(self, request, view, obj):
         if request.method == 'GET':
             if isinstance(request.user, User):
